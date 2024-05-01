@@ -3,5 +3,5 @@
 ![PyTorch 1.13](https://img.shields.io/badge/PyTorch%20-%23EE4C2C.svg?style=plastic)
 ![License CC BY-NC-SA](https://img.shields.io/badge/license-CC_BY--NC--SA--green.svg?style=plastic)
 
-This is the origin Pytorch implementation of Informer in the following paper: 
+This is the origin Pytorch implementation of the "Better Batch" paper: 
 [Better Batch for Deep Probabilistic Time Series Forecasting](https://proceedings.mlr.press/v238/zheng24a/zheng24a.pdf). 
