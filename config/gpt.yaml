@@ -1,0 +1,11 @@
+train:
+  max_epochs: 100
+  gradient_clip_val: 0.1
+  limit_train_batches: 100
+model:
+  n_heads: 2
+  hidden_size: 42
+  rnn_layers: 3
+  dropout: 0.1
+  learning_rate: 0.001
+
