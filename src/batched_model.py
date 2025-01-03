@@ -47,7 +47,7 @@ class BatchDeepAREstimator(DeepAR):
 
         if self.loss.K > 1:
             if isinstance(self.loss, BatchMGD_Kernel):
-                # self.mixture_projector = nn.Sequential(nn.Linear(self.hparams.hidden_size, self.loss.K+1), nn.Softmax(dim=-1))  
+                # self.mixture_projector = nn.Sequential(nn.Linear(self.hparams.hidden_size, self.loss.K+1), nn.Softmax(dim=-1))
                 self.mixture_projector = nn.Sequential(nn.Linear(self.hparams.hidden_size, 20), nn.ELU(), nn.Linear(20, self.loss.K+1), nn.Softmax(dim=-1))  # TODO: better than ELU
             else:
                 self.mixture_projector = nn.Sequential(nn.Linear(self.hparams.hidden_size, 20), nn.ELU(), nn.Linear(20, self.loss.K), nn.Softmax(dim=-1))
@@ -136,7 +136,7 @@ class BatchDeepAREstimator(DeepAR):
             }
 
         return {"optimizer": optimizer, "lr_scheduler": scheduler_config}
-    
+
     def decode_all(
         self,
         x: torch.Tensor,
@@ -149,7 +149,7 @@ class BatchDeepAREstimator(DeepAR):
         else:
             output = [projector(decoder_output) for projector in self.distribution_projector]
         return output, decoder_output, hidden_state
-    
+
     def decode(
         self,
         input_vector: torch.Tensor,
@@ -208,7 +208,7 @@ class BatchDeepAREstimator(DeepAR):
             # from n_samples * batch_size x time steps to batch_size x time steps x n_samples
             output = apply_to_list(output, lambda x: x.reshape(-1, n_samples, input_vector.size(1)).permute(0, 2, 1))
         return output, decoder_output
-    
+
     def forward(self, x: Dict[str, torch.Tensor], n_samples: int = None) -> Dict[str, torch.Tensor]:
         """
         Forward network
@@ -251,7 +251,7 @@ class BatchDeepAREstimator(DeepAR):
             output = torch.cat([output, mixture_weights], dim=-1)
 
         return self.to_network_output(prediction=output)
-    
+
 
 class BatchDeepARPredictor(DeepAR):
     """
@@ -271,7 +271,7 @@ class BatchDeepARPredictor(DeepAR):
                 self.mixture_projector = nn.Sequential(nn.Linear(self.hparams.hidden_size, 20), nn.ELU(), nn.Linear(20, self.loss.K), nn.Softmax(dim=-1))
         elif not self.loss.static:
             self.mixture_projector = nn.Sequential(nn.Linear(self.hparams.hidden_size, 20), nn.ELU(), nn.Linear(20, 1), nn.Sigmoid())
-    
+
     def output_to_prediction(
         self,
         normalized_prediction_parameters: torch.Tensor,
@@ -372,8 +372,8 @@ class BatchDeepARPredictor(DeepAR):
         target_scale: Union[List[torch.Tensor], torch.Tensor],
         n_decoder_steps: int,
         n_samples: int = 1,
-        pre_normed_outputs: torch.Tensor = None, 
-        pre_normed_prediction_params: torch.Tensor = None, 
+        pre_normed_outputs: torch.Tensor = None,
+        pre_normed_prediction_params: torch.Tensor = None,
         **kwargs,
     ) -> Union[List[torch.Tensor], torch.Tensor]:
         # make predictions which are fed into next step
@@ -395,11 +395,11 @@ class BatchDeepARPredictor(DeepAR):
                     normed_prediction_params, target_scale=target_scale, n_samples=n_samples, pre_normed_prediction_params=pre_normed_prediction_params, x_1=pre_normed_outputs,
                     current_decoder_output=current_decoder_output
                 )
-            
+
             # save normalized output for lagged targets
             normalized_output.append(current_target)
 
-            pre_normed_outputs = torch.cat([pre_normed_outputs[:,1:], current_target.unsqueeze(1)], dim=1) 
+            pre_normed_outputs = torch.cat([pre_normed_outputs[:,1:], current_target.unsqueeze(1)], dim=1)
             pre_normed_prediction_params = torch.cat([pre_normed_prediction_params[:,1:], normed_prediction_params.unsqueeze(1)], dim=1)
 
             output.append(prediction)
@@ -411,7 +411,7 @@ class BatchDeepARPredictor(DeepAR):
             # for multi-targets
             output = [torch.stack([out[idx] for out in output], dim=1) for idx in range(len(self.target_positions))]
         return output, weights
-    
+
     def encode(self, x: Dict[str, torch.Tensor]) -> HiddenState:
         """
         Encode sequence into hidden state
@@ -441,7 +441,7 @@ class BatchDeepARPredictor(DeepAR):
         else:
             output = [projector(decoder_output) for projector in self.distribution_projector]
         return output, decoder_output, hidden_state
-    
+
     def decode(
         self,
         input_vector: torch.Tensor,
@@ -503,7 +503,7 @@ class BatchDeepARPredictor(DeepAR):
             output = apply_to_list(output, lambda x: x.reshape(-1, n_samples, input_vector.size(1)).permute(0, 2, 1))
             weights = apply_to_list(weights, lambda x: x.reshape(-1, n_samples, input_vector.size(1), weights.shape[-1]).permute(0, 2, 3, 1))
         return output, weights
-    
+
     def forward(self, x: Dict[str, torch.Tensor], n_samples: int = None) -> Dict[str, torch.Tensor]:
         """
         Forward network
@@ -533,7 +533,7 @@ class BatchDeepARPredictor(DeepAR):
         ) # (batch_size (N in DeepAR), Q, dist_proj (loc_scaler, scale_scaler, loc, scale)
         # return relevant part
         return self.to_network_output(prediction=output), self.to_network_output(prediction=weights)
-    
+
     def predict(
         self,
         data: Union[DataLoader, pd.DataFrame, TimeSeriesDataSet],
@@ -681,7 +681,7 @@ class BatchDeepARPredictor(DeepAR):
         if return_w:
             output.append(_concatenate_output(w_list))
         return output
-    
+
 
 class BatchGPTEstimator(ARTransformer):
     """
@@ -695,7 +695,7 @@ class BatchGPTEstimator(ARTransformer):
 
         if self.loss.K > 1:
             if isinstance(self.loss, BatchMGD_Kernel):
-                # self.mixture_projector = nn.Sequential(nn.Linear(self.hparams.hidden_size, self.loss.K+1), nn.Softmax(dim=-1))  
+                # self.mixture_projector = nn.Sequential(nn.Linear(self.hparams.hidden_size, self.loss.K+1), nn.Softmax(dim=-1))
                 self.mixture_projector = nn.Sequential(nn.Linear(self.hparams.hidden_size, 20), nn.ELU(), nn.Linear(20, self.loss.K+1), nn.Softmax(dim=-1))  # TODO: better than ELU
             else:
                 self.mixture_projector = nn.Sequential(nn.Linear(self.hparams.hidden_size, 20), nn.ELU(), nn.Linear(20, self.loss.K), nn.Softmax(dim=-1))
@@ -784,7 +784,7 @@ class BatchGPTEstimator(ARTransformer):
             }
 
         return {"optimizer": optimizer, "lr_scheduler": scheduler_config}
-    
+
     def decode_all(
         self,
         input_vector: torch.Tensor,
@@ -894,13 +894,13 @@ class BatchGPTPredictor(ARTransformer):
 
         if self.loss.K > 1:
             if isinstance(self.loss, BatchMGD_Kernel):
-                self.mixture_projector = nn.Sequential(nn.Linear(self.hparams.hidden_size, self.loss.K+1), nn.Softmax(dim=-1)) 
-                # self.mixture_projector = nn.Sequential(nn.Linear(self.hparams.hidden_size, 20), nn.ELU(), nn.Linear(20, self.loss.K+1), nn.Softmax(dim=-1))
+                # self.mixture_projector = nn.Sequential(nn.Linear(self.hparams.hidden_size, self.loss.K+1), nn.Softmax(dim=-1))
+                self.mixture_projector = nn.Sequential(nn.Linear(self.hparams.hidden_size, 20), nn.ELU(), nn.Linear(20, self.loss.K+1), nn.Softmax(dim=-1))
             else:
                 self.mixture_projector = nn.Sequential(nn.Linear(self.hparams.hidden_size, 20), nn.ELU(), nn.Linear(20, self.loss.K), nn.Softmax(dim=-1))
         elif not self.loss.static:
             self.mixture_projector = nn.Sequential(nn.Linear(self.hparams.hidden_size, 20), nn.ELU(), nn.Linear(20, 1), nn.Sigmoid())
-    
+
     def output_to_prediction(
         self,
         normalized_prediction_parameters: torch.Tensor,
@@ -1000,7 +1000,7 @@ class BatchGPTPredictor(ARTransformer):
         target_scale: Union[List[torch.Tensor], torch.Tensor],
         n_decoder_steps: int,
         n_samples: int = 1,
-        pre_normed_outputs: torch.Tensor = None, 
+        pre_normed_outputs: torch.Tensor = None,
         **kwargs,
     ) -> Union[List[torch.Tensor], torch.Tensor]:
 
@@ -1016,9 +1016,9 @@ class BatchGPTPredictor(ARTransformer):
 
             # get prediction and its normalized version for the next step
             prediction, current_target, mixture_weights = self.output_to_prediction(
-                normalized_prediction_parameters=normed_prediction_params[:, -1], 
-                target_scale=target_scale, 
-                n_samples=n_samples, pre_normed_prediction_params=normed_prediction_params[:, :-1][:,-self.loss.batch_cov_horizon+1:], 
+                normalized_prediction_parameters=normed_prediction_params[:, -1],
+                target_scale=target_scale,
+                n_samples=n_samples, pre_normed_prediction_params=normed_prediction_params[:, :-1][:,-self.loss.batch_cov_horizon+1:],
                 x_1=pre_normed_outputs,
                 current_decoder_output=current_decoder_output
             )
@@ -1026,7 +1026,7 @@ class BatchGPTPredictor(ARTransformer):
             normalized_output.append(current_target)
             # set output to unnormalized samples, append each target as n_batch_samples x n_random_samples
 
-            pre_normed_outputs = torch.cat([pre_normed_outputs[:,1:], current_target.unsqueeze(1)], dim=1) 
+            pre_normed_outputs = torch.cat([pre_normed_outputs[:,1:], current_target.unsqueeze(1)], dim=1)
 
             output.append(prediction)
             weights.append(mixture_weights)
@@ -1253,4 +1253,4 @@ class BatchGPTPredictor(ARTransformer):
         if return_w:
             output.append(_concatenate_output(w_list))
         return output
-    
+

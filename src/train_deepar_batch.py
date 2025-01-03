@@ -27,24 +27,21 @@ from pytorch_forecasting.data.encoders import (
 
 from pyro.ops.stats import crps_empirical
 
-import wandb
-wandb.login()
-
 matplotlib.use("Agg")
 pl.seed_everything(42)
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--device', type=int, default=0)
 parser.add_argument('--model', type=str, default="deepar")
-parser.add_argument('--dataset', type=str, default="toy_example")
+parser.add_argument('--dataset', type=str, default="m4_hourly")
 parser.add_argument('--batch_size', type=int, default=64)
 parser.add_argument('--prediction_horizon', type=int, default=24)
 parser.add_argument('--num_pred_rolling', type=int, default=7)
 
 parser.add_argument('--batch_cov_horizon', type=int, default=None)
 parser.add_argument('--loss', type=str, default="kernel")  # toeplitz, kernel
-parser.add_argument('--length_scale', type=int, default=2)
-parser.add_argument('--num_mixture', type=int, default=1)
+parser.add_argument('--length_scale', type=int, default=1)
+parser.add_argument('--num_mixture', type=int, default=3)
 
 parser.add_argument('--rho', type=float, default=0.0)
 parser.add_argument('--corr_lr', type=float, default=0.001)
@@ -52,25 +49,23 @@ parser.add_argument('--static', action='store_true')  # store_false: True
 parser.add_argument('--static_l', action='store_false')
 args = parser.parse_args()
 
-
-with open('../../data/pytorch_forecsating_datasets/pred_horizon_dict.pkl', 'rb') as f:
+with open('./datasets/pred_horizon_dict.pkl', 'rb') as f:
     pred_horizon_dict = pickle.load(f)
-with open('../../data/pytorch_forecsating_datasets/pred_rolling_dict.pkl', 'rb') as f:
+with open('./datasets/pred_rolling_dict.pkl', 'rb') as f:
     pred_rolling_dict = pickle.load(f)
-with open('../../data/pytorch_forecsating_datasets/dataset_freq.pkl', 'rb') as f:
+with open('./datasets/dataset_freq.pkl', 'rb') as f:
     dataset_freq_dict = pickle.load(f)
-
 args.prediction_horizon = pred_horizon_dict[args.dataset]
 args.num_pred_rolling = pred_rolling_dict[args.dataset] if args.dataset in pred_rolling_dict.keys() else 1
 if args.batch_cov_horizon is None:
-    args.batch_cov_horizon = args.prediction_horizon 
+    args.batch_cov_horizon = args.prediction_horizon
 
 def main():
     """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
     Traffic data
     """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
     ##################################### Load Data ###################################
-    data = pd.read_csv("../../data/pytorch_forecsating_datasets/%s.csv"%(args.dataset))
+    data = pd.read_csv("./datasets/%s.csv"%(args.dataset))
     if dataset_freq_dict[args.dataset] in ['30min', '5min', 'H', 'T']:
         data['datetime'] = pd.to_datetime(data['datetime'])
         data['tod'] = (data['datetime'].values - data['datetime'].values.astype("datetime64[D]")) / np.timedelta64(1, "D")
@@ -90,9 +85,6 @@ def main():
     context_length = args.prediction_horizon
     validation_cutoff = data["time_idx"].max() - args.prediction_horizon - args.num_pred_rolling + 1
     training_cutoff = validation_cutoff - (data["time_idx"].max() - validation_cutoff)
-    # if training_cutoff < context_length + args.prediction_horizon:
-    #     training_cutoff = validation_cutoff - (data["time_idx"].max() - validation_cutoff)
-    # training_cutoff = validation_cutoff - (data["time_idx"].max() - validation_cutoff)
 
     training = TimeSeriesDataSet(
         data[lambda x: x.time_idx <= training_cutoff],
@@ -111,7 +103,6 @@ def main():
 
     validation = TimeSeriesDataSet.from_dataset(training, data[lambda x: x.time_idx <= validation_cutoff], min_prediction_idx=training_cutoff+1)
     testing = TimeSeriesDataSet.from_dataset(training, data, min_prediction_idx=validation_cutoff + 1)
-    # testing = TimeSeriesDataSet.from_dataset(training, data, min_prediction_idx=validation_cutoff+1, max_prediction_length=args.prediction_horizon)
 
     train_dataloader = training.to_dataloader(
         train=True, batch_size=args.batch_size, num_workers=0
@@ -120,7 +111,7 @@ def main():
         train=False, batch_size=args.batch_size, num_workers=0
     )
     test_dataloader = testing.to_dataloader(
-        train=False, batch_size=args.batch_size, num_workers=0, 
+        train=False, batch_size=args.batch_size, num_workers=0,
     )
 
     ################################## Initialize Model ##################################
@@ -133,22 +124,11 @@ def main():
 
     if args.loss == 'kernel':
         if args.num_mixture > 1:
-            log_file = "%s_batch_%s_D%s_K%s_lr%s_pt10_wd"%(args.dataset, args.loss, args.batch_cov_horizon, args.num_mixture, args.corr_lr)
+            log_file = "%s_batch_%s_D%s_K%s_lr%s_wd"%(args.dataset, args.loss, args.batch_cov_horizon, args.num_mixture, args.corr_lr)
         else:
             log_file = "%s_batch_%s_D%s_l%s_static_l%s_lr%s_static%s"%(args.dataset, args.loss, args.batch_cov_horizon, args.length_scale, args.static_l, args.corr_lr, args.static)
         logger = TensorBoardLogger(save_dir="logs", name=args.model, version=log_file)
         loss = BatchMGD_Kernel(D=args.batch_cov_horizon, K=args.num_mixture, l=args.length_scale, lr=args.corr_lr, static=args.static, static_l=args.static_l)
-    elif args.loss == 'toeplitz':
-        if args.num_mixture > 1:
-            log_file = "%s_batch_%s_D%s_K%s_rho%s_lr%s"%(args.dataset, args.loss, args.batch_cov_horizon, args.num_mixture, args.rho, args.corr_lr)
-        else:
-            log_file = "%s_batch_%s_D%s_rho%s_lr%s_static%s"%(args.dataset, args.loss, args.batch_cov_horizon, args.rho, args.corr_lr, args.static)
-        logger = TensorBoardLogger(save_dir="logs", name=args.model, version=log_file)
-        loss = BatchMGD_Toeplitz(D=args.batch_cov_horizon, K=args.num_mixture, rho=args.rho, lr=args.corr_lr, static=args.static)
-    # elif args.loss == 'ar':
-    #     log_file = "%s_batch_%s_D%s"%(args.dataset, args.loss, args.batch_cov_horizon)
-    #     logger = TensorBoardLogger(save_dir="logs", name=args.model, version=log_file)
-    #     loss = BatchMGD_AR(hidden_size=configs['model']['hidden_size'], D=args.batch_cov_horizon)
     else:
         raise Exception("Not supported parameterization for Cov")
 
@@ -184,7 +164,6 @@ def main():
     )
 
     ################################## Evaluate Model ##################################
-    # checkpoint_callback.best_model_path = ".\logs\deepar\m4_hourly_batch_ar_D48\checkpoints\epoch=98-val_loss=1.03.ckpt"
     best_model = BatchDeepARPredictor.load_from_checkpoint(checkpoint_callback.best_model_path)
 
     actuals = torch.cat([y[0] for x, y in iter(test_dataloader)])
@@ -194,7 +173,6 @@ def main():
         raw_predictions = best_model.predict(test_dataloader, mode="raw", n_samples=100)
 
         crps = crps_empirical(raw_predictions['prediction'].permute(2, 0, 1), actuals)
-        crps_mean = crps.mean()
         crps_sum = (crps.sum()/actuals.sum()).item()
 
         ql = QuantileLoss(quantiles=[0.5, 0.9])
@@ -204,7 +182,7 @@ def main():
         p05_risk = (ql05.sum()/actuals.sum()).item()
         p09_risk = (ql09.sum()/actuals.sum()).item()
 
-        metrics.append([crps_mean, crps_sum, p05_risk, p09_risk])
+        metrics.append([crps_sum, p05_risk, p09_risk])
 
     metrics = np.array(metrics)
     metrics = np.concatenate([metrics.mean(0).reshape(-1, 1), metrics.std(0).reshape(-1, 1)], axis=1)
@@ -224,7 +202,4 @@ def main():
 
 if __name__ == "__main__":
     if args.batch_cov_horizon <= args.prediction_horizon:
-        wandb.init(config=args)
         score = main()
-        wandb.log({'val_loss': score})
-        wandb.finish()

@@ -21,7 +21,7 @@ from pytorch_forecasting.data.encoders import (
 )
 
 import properscoring as ps
-# from pyro.ops.stats import crps_empirical
+from pyro.ops.stats import crps_empirical
 
 import wandb
 wandb.login()
@@ -39,7 +39,7 @@ parser.add_argument('--num_pred_rolling', type=int, default=7)
 
 parser.add_argument('--batch_cov_horizon', type=int, default=None)
 parser.add_argument('--loss', type=str, default="kernel")  # toeplitz, kernel
-parser.add_argument('--length_scale', type=int, default=2)
+parser.add_argument('--length_scale', type=int, default=1)
 parser.add_argument('--num_mixture', type=int, default=3)
 
 parser.add_argument('--rho', type=float, default=0.0)
@@ -49,24 +49,23 @@ parser.add_argument('--static_l', action='store_false')
 args = parser.parse_args()
 
 
-with open('../../data/pytorch_forecsating_datasets/pred_horizon_dict.pkl', 'rb') as f:
+with open('./datasets/pred_horizon_dict.pkl', 'rb') as f:
     pred_horizon_dict = pickle.load(f)
-with open('../../data/pytorch_forecsating_datasets/pred_rolling_dict.pkl', 'rb') as f:
+with open('./datasets/pred_rolling_dict.pkl', 'rb') as f:
     pred_rolling_dict = pickle.load(f)
-with open('../../data/pytorch_forecsating_datasets/dataset_freq.pkl', 'rb') as f:
+with open('./datasets/dataset_freq.pkl', 'rb') as f:
     dataset_freq_dict = pickle.load(f)
-
 args.prediction_horizon = pred_horizon_dict[args.dataset]
 args.num_pred_rolling = pred_rolling_dict[args.dataset] if args.dataset in pred_rolling_dict.keys() else 1
 if args.batch_cov_horizon is None:
-    args.batch_cov_horizon = args.prediction_horizon 
+    args.batch_cov_horizon = args.prediction_horizon
 
 def main():
     """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
     Traffic data
     """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
     ##################################### Load Data ###################################
-    data = pd.read_csv("../../data/pytorch_forecsating_datasets/%s.csv"%(args.dataset))
+    data = pd.read_csv("./datasets/%s.csv"%(args.dataset))
     if dataset_freq_dict[args.dataset] in ['30min', '5min', 'H', 'T']:
         data['datetime'] = pd.to_datetime(data['datetime'])
         data['tod'] = (data['datetime'].values - data['datetime'].values.astype("datetime64[D]")) / np.timedelta64(1, "D")
@@ -104,13 +103,13 @@ def main():
 
     testing = TimeSeriesDataSet.from_dataset(training, data, min_prediction_idx=validation_cutoff + 1)
     test_dataloader = testing.to_dataloader(
-        train=False, batch_size=args.batch_size, num_workers=0, 
+        train=False, batch_size=args.batch_size, num_workers=0,
     )
 
     ################################## Initialize Model ##################################
     if args.loss == 'kernel':
         if args.num_mixture > 1:
-            log_file = "%s_batch_%s_D%s_K%s_lr%s_pt10_2l_wd"%(args.dataset, args.loss, args.batch_cov_horizon, args.num_mixture, args.corr_lr)
+            log_file = "%s_batch_%s_D%s_K%s_lr%s_wd"%(args.dataset, args.loss, args.batch_cov_horizon, args.num_mixture, args.corr_lr)
         else:
             log_file = "%s_batch_%s_D%s_l%s_static_l%s_lr%s_static%s"%(args.dataset, args.loss, args.batch_cov_horizon, args.length_scale, args.static_l, args.corr_lr, args.static)
         logger = TensorBoardLogger(save_dir="logs", name=args.model, version=log_file)
@@ -142,14 +141,14 @@ def main():
     for i in range(3):
         raw_predictions = best_model.predict(test_dataloader, mode="raw", n_samples=100)
 
+        # test wtih closed-form CRPS
         mu = raw_predictions['prediction'].mean(-1)
         sig = raw_predictions['prediction'].std(-1)
         crps = ps.crps_gaussian(actuals, mu=mu, sig=sig)
-        crps_mean = crps.mean()
         crps_sum = (crps.sum()/actuals.sum()).item()
 
+        # test with empirical CRPS
         # crps = crps_empirical(raw_predictions['prediction'].permute(2, 0, 1), actuals)
-        # crps_mean = crps.mean()
         # crps_sum = (crps.sum()/actuals.sum()).item()
 
         ql = QuantileLoss(quantiles=[0.5, 0.9])
@@ -159,9 +158,9 @@ def main():
         p05_risk = (ql05.sum()/actuals.sum()).item()
         p09_risk = (ql09.sum()/actuals.sum()).item()
 
-        mse = torch.mean((raw_predictions['prediction'].mean(-1)-actuals)**2) 
+        mse = torch.mean((raw_predictions['prediction'].mean(-1)-actuals)**2)
 
-        metrics.append([crps_mean, crps_sum, p05_risk, p09_risk, mse])
+        metrics.append([crps_sum, p05_risk, p09_risk, mse])
 
     metrics = np.array(metrics)
     metrics = np.concatenate([metrics.mean(0).reshape(-1, 1), metrics.std(0).reshape(-1, 1)], axis=1)
@@ -169,7 +168,7 @@ def main():
     if not os.path.isdir("./metrics/%s"%(args.model)):
         os.makedirs("./metrics/%s"%(args.model))
 
-    with open('./metrics/%s/%s_withMSE.txt'%(args.model, log_file), 'w') as f:
+    with open('./metrics/%s/%s.txt'%(args.model, log_file), 'w') as f:
         for i in range(metrics.shape[0]):
             if i != metrics.shape[0]-1:
                 f.write('& %.4f$\pm$%.4f'%(metrics[i, 0], metrics[i, 1]))
@@ -179,6 +178,4 @@ def main():
 
 if __name__ == "__main__":
     if args.batch_cov_horizon <= args.prediction_horizon:
-        wandb.init(config=args)
         main()
-        wandb.finish()

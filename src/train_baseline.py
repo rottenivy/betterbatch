@@ -23,10 +23,7 @@ from pytorch_forecasting.data.encoders import (
 )
 
 from pyro.ops.stats import crps_empirical
-from model import LSTMModel, TemporalFusionTransformer, ARTransformer
-
-# import wandb
-# wandb.login()
+from model import ARTransformer
 
 matplotlib.use("Agg")
 pl.seed_everything(42)
@@ -34,16 +31,16 @@ pl.seed_everything(42)
 parser = argparse.ArgumentParser()
 parser.add_argument('--device', type=int, default=0)
 parser.add_argument('--model', type=str, default="deepar")
-parser.add_argument('--dataset', type=str, default="toy_example")
+parser.add_argument('--dataset', type=str, default="m4_hourly")
 parser.add_argument('--batch_size', type=int, default=64)
 args = parser.parse_args()
 
 
-with open('../../data/pytorch_forecsating_datasets/pred_horizon_dict.pkl', 'rb') as f:
+with open('./datasets/pred_horizon_dict.pkl', 'rb') as f:
     pred_horizon_dict = pickle.load(f)
-with open('../../data/pytorch_forecsating_datasets/pred_rolling_dict.pkl', 'rb') as f:
+with open('./datasets/pred_rolling_dict.pkl', 'rb') as f:
     pred_rolling_dict = pickle.load(f)
-with open('../../data/pytorch_forecsating_datasets/dataset_freq.pkl', 'rb') as f:
+with open('./datasets/dataset_freq.pkl', 'rb') as f:
     dataset_freq_dict = pickle.load(f)
 args.prediction_horizon = pred_horizon_dict[args.dataset]
 args.num_pred_rolling = pred_rolling_dict[args.dataset] if args.dataset in pred_rolling_dict.keys() else 1
@@ -51,7 +48,7 @@ args.num_pred_rolling = pred_rolling_dict[args.dataset] if args.dataset in pred_
 
 def main():
     ################################## Load Data ##################################
-    data = pd.read_csv("../../data/pytorch_forecsating_datasets/%s.csv"%(args.dataset))
+    data = pd.read_csv("./datasets/%s.csv"%(args.dataset))
     if dataset_freq_dict[args.dataset] in ['30min', '5min', 'H', 'T']:
         data['datetime'] = pd.to_datetime(data['datetime'])
         data['tod'] = (data['datetime'].values - data['datetime'].values.astype("datetime64[D]")) / np.timedelta64(1, "D")
@@ -108,11 +105,10 @@ def main():
     configs = yaml.load(f, Loader=yaml.Loader)
     f.close()
 
-    logger = TensorBoardLogger(save_dir="logs", name=args.model, version="%s_vanilla_pt10"%(args.dataset))
+    logger = TensorBoardLogger(save_dir="logs", name=args.model, version="%s_vanilla"%(args.dataset))
 
     trainer = pl.Trainer(
         logger=logger,
-        # max_epochs=1,
         max_epochs=configs['train']['max_epochs'],
         accelerator='gpu',
         devices=[args.device],
@@ -134,31 +130,6 @@ def main():
             learning_rate=configs['model']['learning_rate'],
             loss=NormalDistributionLoss(),
             optimizer="adam"
-        )
-    elif args.model == "lstm":
-        model = LSTMModel
-        net = model.from_dataset(
-            training,
-            hidden_size=configs['model']['hidden_size'],
-            n_layers=configs['model']['n_layers'],
-            dropout=configs['model']['dropout'],
-            learning_rate=configs['model']['learning_rate'],
-            loss=NormalDistributionLoss(),
-            optimizer="adam"
-        )
-    elif args.model == "tft":
-        if len(time_varying_known_cats) == 0:
-            sys.exit(0)
-        model = TemporalFusionTransformer
-        net = model.from_dataset(
-            training,
-            learning_rate=configs['model']['learning_rate'],
-            hidden_size=configs['model']['hidden_size'],
-            attention_head_size=configs['model']['attention_head_size'],
-            dropout=configs['model']['dropout'],
-            hidden_continuous_size=configs['model']['hidden_continuous_size'],
-            loss=NormalDistributionLoss(),
-            optimizer="adam",
         )
     elif args.model == "gpt":
         model = ARTransformer
@@ -182,7 +153,6 @@ def main():
     )
 
     ################################## Evaluate Model ##################################
-    # best_model = model.load_from_checkpoint("./logs/gpt/m4_hourly_vanilla/checkpoints/epoch=97-val_loss=1.10.ckpt")
     best_model = model.load_from_checkpoint(checkpoint_callback.best_model_path)
 
     actuals = torch.cat([y[0] for x, y in iter(test_dataloader)])
@@ -192,7 +162,6 @@ def main():
         raw_predictions = best_model.predict(test_dataloader, mode="raw", n_samples=100)
 
         crps = crps_empirical(raw_predictions['prediction'].permute(2, 0, 1), actuals)
-        crps_mean = crps.mean()
         crps_sum = (crps.sum()/actuals.sum()).item()
 
         ql = QuantileLoss(quantiles=[0.5, 0.9])
@@ -202,7 +171,7 @@ def main():
         p05_risk = (ql05.sum()/actuals.sum()).item()
         p09_risk = (ql09.sum()/actuals.sum()).item()
 
-        metrics.append([crps_mean, crps_sum, p05_risk, p09_risk])
+        metrics.append([crps_sum, p05_risk, p09_risk])
 
     metrics = np.array(metrics)
     metrics = np.concatenate([metrics.mean(0).reshape(-1, 1), metrics.std(0).reshape(-1, 1)], axis=1)
@@ -210,7 +179,7 @@ def main():
     if not os.path.isdir("./metrics/%s"%(args.model)):
         os.makedirs("./metrics/%s"%(args.model))
 
-    with open('./metrics/%s/%s_vanilla_pt10.txt'%(args.model, args.dataset), 'w') as f:
+    with open('./metrics/%s/%s_vanilla.txt'%(args.model, args.dataset), 'w') as f:
         for i in range(metrics.shape[0]):
             if i != metrics.shape[0]-1:
                 f.write(r'& %.4f$\pm$%.4f'%(metrics[i, 0], metrics[i, 1]))
@@ -221,7 +190,4 @@ def main():
 
 
 if __name__ == "__main__":
-    # wandb.init(config=args)
     score = main()
-    # wandb.log({'val_loss': score})
-    # wandb.finish()
