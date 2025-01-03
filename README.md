@@ -28,13 +28,13 @@ Use the `generate_datasets.ipynb` notebook located in the `exps` directory to tr
 To train a baseline model on the `m4_hourly` dataset, execute the following command:
 
 ```bash
-python .\train_baseline.py --model deepar --dataset m4_hourly
+python .\src\train_baseline.py --model deepar --dataset m4_hourly
 ```
 
 To train the proposed model on the `m4_hourly` dataset, execute the following command:
 
 ```bash
-python .\train_deepar_batch.py --model deepar --dataset m4_hourly --loss kernel --num_mixture 4
+python .\src\train_deepar_batch.py --model deepar --dataset m4_hourly --loss kernel --num_mixture 4
 ```
 
 ## Reference
