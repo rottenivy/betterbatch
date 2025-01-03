@@ -3,7 +3,7 @@
 ![PyTorch 1.13](https://img.shields.io/badge/PyTorch%20-%23EE4C2C.svg?style=plastic)
 
 This repository contains the PyTorch implementation for the paper
-[Better Batch for Deep Probabilistic Time Series Forecasting](https://proceedings.mlr.press/v238/zheng24a/zheng24a.pdf) by [Vincent Z. Zheng](https://vincent-zheng.com/) and [Lijun Sun](https://lijunsun.github.io/). This work has been accepted at NeurIPS 2024.
+[Better Batch for Deep Probabilistic Time Series Forecasting](https://proceedings.mlr.press/v238/zheng24a/zheng24a.pdf) by [Vincent Z. Zheng](https://vincent-zheng.com/) and [Lijun Sun](https://lijunsun.github.io/). This work has been accepted at AISTATS 2024.
 
 <p align="center">
   <img width="600" src="imgs/minibatch_new.jpg">
